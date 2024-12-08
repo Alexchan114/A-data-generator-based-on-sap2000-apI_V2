@@ -3,8 +3,13 @@ import random
 import numpy as np
 import os
 
+############################ Introduction ##############################
 # Run this code while running SAP2000 project
 # Sap2000 V23.3.1 is recommended
+# You can find every api used in this program in CSI_OAPI_Documentation, 
+# which is in the SAP2000 installation directory
+# Version: 2.0
+########################################################################
 
 
 ## Create 6 folders to store datas and labels for frequency, stress ratio, and inter-story displacement
@@ -41,8 +46,8 @@ SapModel = sap_object.SapModel
 # Unlock the sap2000 model
 SapModel.SetModelIsLocked(False)
 
-# Set the model units to kN-m-C
-SapModel.SetPresentUnits(9)  # 9 for kN-m-C
+# Set the model units to N/mm^2
+SapModel.SetPresentUnits(9)  # 9 for N/mm^2
 
 
 #Randomly distribute goods in the warehouse
@@ -207,11 +212,13 @@ for trial in range(num_trials):
     
 
 ########################### Get the interlayer displacement (angle) data ############################
+# Generalized dispacement need to be set in Sap2000 model, this code use corner point of the frame to get the displacement
+# For this case, the frame is 3 floors, rad_1 stands for the displacement angle of the first floor,etc.
 
     num_floor = 3
     result_rad=[]
     for floor in range(num_floor):
-        Name=f"rad_{floor}"
+        Name=f"rad_{floor}"  # Name of the generalized displacement item, for this case: rad_1, rad_2, rad_3
         NumberResults=0
         LoadCase=[]
         GD=[]
