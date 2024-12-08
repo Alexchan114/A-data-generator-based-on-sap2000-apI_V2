@@ -3,8 +3,11 @@ import random
 import numpy as np
 import os
 
+# Run this code while running SAP2000 project
+# Sap2000 V23.3.1 is recommended
 
-#创建6个文件夹用于存储频率、应力比、层间位移的data和label
+
+## Create 6 folders to store datas and labels for frequency, stress ratio, and inter-story displacement
 
 CirFre_Data = 'CirFre_Data'
 if not os.path.exists(CirFre_Data):
@@ -31,39 +34,39 @@ if not os.path.exists(Displ_Label):
     os.makedirs(Displ_Label)
 
 
-# 连接到运行中的 SAP2000
+# Connect to the running instance of SAP2000
 sap_object = comtypes.client.GetActiveObject("CSI.SAP2000.API.SapObject")
 SapModel = sap_object.SapModel
 
-# 解锁模型
+# Unlock the sap2000 model
 SapModel.SetModelIsLocked(False)
 
-# 设置单位
-SapModel.SetPresentUnits(9)  # 设定单位为 N/mm^2
+# Set the model units to kN-m-C
+SapModel.SetPresentUnits(9)  # 9 for kN-m-C
 
 
+#Randomly distribute goods in the warehouse
 def random_goods_distribution(num_z, num_x, num_y):
-    # 创建一个 num_z 行，num_x * num_y 列的矩阵
+    # create a num_z * num_x * num_y matrix to store the distribution of goods
     distribution_matrix = []
     
     for layer in range(num_z):
-        # 随机生成当前层的货物分布，0 或 1
+        # Randomly distribute goods in each layer,1 for goods, 0 for no goods
         distribution = [random.choice([0, 1]) for _ in range(num_x * num_y)]
-        distribution_matrix.append(distribution)  # 将当前层的分布添加到矩阵中
+        distribution_matrix.append(distribution)  # append the distribution of each layer
         
     return distribution_matrix
 
 
-# 循环进行随机货位分布并计算频率
-
-num_trials = 5 # 生成数据的条数
-surface_pressure_area = 0.001  # 均布面力
+############# configurations #############
+num_trials = 5 # epoch for data generation
+surface_pressure_area = 0.001  # pressure for each area
 num_z = 3 #  3 for real , 3 for test
 num_x = 11 # 11 for real , 7 for test
 num_y = 14 # 14 for real , 7 for test
 
 
-#获取框架信息，用于后续输出应力比
+# Get the frame information 
 frame_info=sap_object.SapModel.FrameObj.GetNameList()
 
 #if frame_info != 0:
@@ -71,30 +74,30 @@ frame_info=sap_object.SapModel.FrameObj.GetNameList()
 #else:
     #print("GetNameList successfully.")
 
-#获取框架编号list   
+# Get the frame name list   
 frame_name=frame_info[1]
 #print(frame_name)
 
 
-#根据货位分布矩阵，对结构施加均布面力，然后进行分析以及设计
+#Set area load  for each area according to the goods distribution matrix and run the analysis and design
 
 print("**************** Start process ******************")
 #print('—————————————————————————————————————————————————————————————————————————————————————————————————————————')
 
-num_loc = 462  # 货位及车道位总数 147 for test   462 for real
+num_loc = 462  # Total goos position, storage&AGVway included (147 for test   462 for real)
 
 for trial in range(num_trials):
-    # 随机分布货位
+    # Randomly distribute goods in the warehouse
     distribution_matrix = random_goods_distribution(num_z, num_x, num_y)
     
     #print(f"Trial {trial + 1}: Goods Distribution Matrix:")
     #for layer in distribution_matrix:
         #print(layer)
 
-    #flatten货位分布矩阵，便于后续操作
+    # Flatten the distribution matrix, 1 for goods, 0 for no goods
     flattened_distribution = [item for sublist in distribution_matrix for item in sublist]
 
-    # 按照货位分布矩阵，在 SAP2000 中添加均布面力
+    # Set the area load for each area according to the goods distribution matrix
     for loc in range(num_loc):
         if flattened_distribution[loc] == 1:
             area_name = str(loc + 1)
@@ -114,24 +117,23 @@ for trial in range(num_trials):
                 #print("Area load assigned successfully.")
             
 
-    #执行模态分析
+    # Run the analysis 
     ret=SapModel.Analyze.RunAnalysis()
-    #ret = SapModel.Analyze.RunAnalysis()
     #if ret != 0:
         #print("Analysis did not run successfully.")
     #else:
         #print("Analysis run successfully.")
 
-    #执行钢结构设计
+    # Run the design
     ret=SapModel.DesignSteel.StartDesign()
     #if ret != 0:
-        #print("StartDesign failed.")
+        #print("Design did not run successfully.")
     #else:
-        #print("StartDesign succeeded.")
+        #print("Design run successfully.")
     
 
 
-######################### 获取模态(前12阶圆频率)数据 ####################
+######################### Get first 12 circ_frequences of the structure ####################
 
     NumberResults = 12
     LoadCase = []
@@ -142,7 +144,6 @@ for trial in range(num_trials):
     CircFreq = []
     EigenValue = []
 
-    # 调用函数获取模态数据
     result = SapModel.Results.ModalPeriod(NumberResults, 
                                           LoadCase, 
                                           StepType, 
@@ -156,14 +157,14 @@ for trial in range(num_trials):
     #else:
         #print("ModalPeriod succeeded.")
 
-    #print(f"Trial {trial + 1} CirFreq: {result[6]}")  # 6 代表CircFreq
+    #print(f"Trial {trial + 1} CirFreq: {result[6]}")  # 6 for CircFreq
 
     np.save(os.path.join(CirFre_Data,f'data_cirfre_{trial}'), distribution_matrix)
     np.save(os.path.join(CirFre_Label,f'label_cirfre_{trial}'), result[6])
 
 
 
-########################### 获取应力比数据 ############################
+########################### Get the stress ratio data ############################
 
     max_ratio = 0  
 
@@ -192,7 +193,7 @@ for trial in range(num_trials):
         if result_ratio[2][0] > max_ratio:
             max_ratio = result_ratio[2][0]
             
-        #这里会持续输出“failed”，但是实际上是成功的，应力比会正常输出
+        #The output may be "GetSummaryResults failed." , however, the data is still gotten successfully
         #if ret != 0:
             #print("GetSummaryResults failed.")
         #else:
@@ -205,7 +206,7 @@ for trial in range(num_trials):
     np.save(os.path.join(Ratio_Label,f'label_ratio_{trial}'), max_ratio)   
     
 
-########################### 获取层间位移数据 ############################
+########################### Get the interlayer displacement (angle) data ############################
 
     num_floor = 3
     result_rad=[]
@@ -230,7 +231,8 @@ for trial in range(num_trials):
                                                          Value)
         max_displ = max(result_displ[6])
         result_rad.append(max_displ)
-    
+
+        #The output may be "GeneralizedDispl failed." , however, the data is still gotten successfully
         #if result_displ != 0:
             #print("GeneralizedDispl failed.")
         #else:
@@ -244,10 +246,11 @@ for trial in range(num_trials):
 
 
     #print('—————————————————————————————————————————————————————————————————————————————————————————————————————————')
-     #解锁模型
+
+     #Unlock the model
     SapModel.SetModelIsLocked(False)
 
-    # 删除分析以及设计结果
+    # Delete the analysis and design results
     ret1=sap_object.SapModel.Analyze.DeleteResults(" ", True)
     #if ret1 != 0:
         #print("Analyze_Results not deleted successfully.")
@@ -261,7 +264,8 @@ for trial in range(num_trials):
     #else:
         #print("Design_Results deleted successfully.")
     
-    # 删除均布面力
+
+    # Delete the area load for each area
     for load in range(num_loc):
         if flattened_distribution[load] == 1:
             load_name = str(load + 1)
@@ -276,10 +280,11 @@ for trial in range(num_trials):
             #else:
                 #print("Area load deleted successfully.")
 
-    #再次解锁模型，确保模型解锁
+
+    #Unlock the model again, in case the model is locked
     SapModel.SetModelIsLocked(False)
     
 print("**************** ALL process done ******************")
 
-# 关闭 SAP2000
+# Close SAP2000 
 #sap_object.ApplicationExit(False)
